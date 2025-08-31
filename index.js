@@ -7,7 +7,10 @@ require('dotenv').config();
 
 // Import routes
 const authRoutes = require('./routes/auth');
-
+const userRoutes = require('./routes/user');
+const testRoutes = require('./routes/tests');
+const examRoutes = require('./routes/exam');
+const adminRoutes = require('./routes/admin');
 // Import middleware
 const errorHandler = require('./middlewares/errorHandler');
 
@@ -25,7 +28,7 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100 // limit each IP to 100 requests per windowMs
 });
-app.use(limiter);
+// app.use(limiter);
 
 // CORS
 app.use(cors({
@@ -40,6 +43,10 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/exams', examRoutes);
+app.use('/api/tests', testRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

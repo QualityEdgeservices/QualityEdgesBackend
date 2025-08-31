@@ -7,6 +7,10 @@ const {  sendVerificationEmail,
   sendPasswordResetConfirmation } = require('../utils/sendEmail');
 const { validationResult } = require('express-validator');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
+const Test = require('../models/Test');
+
 
 // Generate random OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
@@ -222,109 +226,244 @@ const googleAuth = async (req, res) => {
   }
 };
 
+
+// Configure email transporter (update with your email service)
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// Generate OTP
+const generateOtp = () => {
+  return crypto.randomInt(100000, 999999).toString();
+};
+
+// Forgot password - send OTP
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
+    // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
-      // Return success even if user doesn't exist for security
-      return res.json({ 
-        message: 'If an account with that email exists, a password reset link has been sent.' 
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User with this email does not exist' 
       });
     }
 
-    // Generate reset token
-    const resetToken = user.getResetPasswordToken();
+    // Generate OTP and set expiration (10 minutes)
+    const otp = generateOtp();
+    const otpExpiration = Date.now() + 10 * 60 * 1000;
+
+    // Save OTP and expiration to user
+    user.resetPasswordOtp = otp;
+    user.resetPasswordExpires = otpExpiration;
     await user.save();
 
-    // Send reset email
-    const emailSent = await sendPasswordResetEmail(email, resetToken);
+    // Send email with OTP
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Password Reset OTP',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Password Reset Request</h2>
+          <p>You requested to reset your password. Use the OTP below to verify your identity:</p>
+          <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
+            <h3 style="margin: 0; color: #333; letter-spacing: 3px;">${otp}</h3>
+          </div>
+          <p>This OTP will expire in 10 minutes.</p>
+          <p>If you didn't request this password reset, please ignore this email.</p>
+        </div>
+      `,
+    };
 
-    if (!emailSent) {
-      user.resetPasswordToken = undefined;
-      user.resetPasswordExpire = undefined;
-      await user.save();
-      
-      return res.status(500).json({ message: 'Email could not be sent' });
-    }
+    await transporter.sendMail(mailOptions);
 
-    res.json({ 
-      message: 'If an account with that email exists, a password reset link has been sent.' 
+    res.status(200).json({
+      success: true,
+      message: 'Password reset OTP sent to your email',
     });
-
   } catch (error) {
     console.error('Forgot password error:', error);
-    res.status(500).json({ message: 'Server error during password reset request' });
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
   }
 };
 
-// Reset password with token
+// Verify OTP
+const  verifyResetOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    // Find user by email
+    const user = await User.findOne({ 
+      email, 
+      resetPasswordExpires: { $gt: Date.now() } 
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired OTP',
+      });
+    }
+
+    // Check if OTP matches
+    if (user.resetPasswordOtp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid OTP',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully',
+    });
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+};
+
+// Reset password
 const resetPassword = async (req, res) => {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
+    const { email, otp, newPassword } = req.body;
 
-    // Hash token to compare with stored hash
-    const resetPasswordToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
-
-    const user = await User.findOne({
-      resetPasswordToken,
-      resetPasswordExpire: { $gt: Date.now() }
+    // Find user by email with valid OTP
+    const user = await User.findOne({ 
+      email, 
+      resetPasswordOtp: otp,
+      resetPasswordExpires: { $gt: Date.now() } 
     });
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired reset token' });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired OTP',
+      });
     }
 
-    // Set new password
-    user.password = password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
+    // Set new password (pre-save hook will hash it)
+    user.password = newPassword;
+    user.resetPasswordOtp = undefined;
+    user.resetPasswordExpires = undefined;
+
     await user.save();
 
-    // Send confirmation email
-    await sendPasswordResetConfirmation(user.email);
-
-    res.json({ message: 'Password reset successful' });
-
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully',
+    });
   } catch (error) {
     console.error('Reset password error:', error);
-    res.status(500).json({ message: 'Server error during password reset' });
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
   }
 };
 
-// Verify reset token
-const verifyResetToken = async (req, res) => {
+
+// Logout Controller
+const logout = async (req, res) => {
   try {
-    const { token } = req.params;
-
-    const resetPasswordToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
-
-    const user = await User.findOne({
-      resetPasswordToken,
-      resetPasswordExpire: { $gt: Date.now() }
+    // If using cookies, clear them
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
     });
 
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired reset token' });
-    }
-
-    res.json({ message: 'Token is valid', email: user.email });
-
+    return res.status(200).json({
+      success: true,
+      message: "Logged out successfully",
+    });
   } catch (error) {
-    console.error('Verify reset token error:', error);
-    res.status(500).json({ message: 'Server error during token verification' });
+    console.error("Logout error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while logging out",
+    });
   }
 };
 
+// const me = async (req, res) => {
+//   try {
+//     res.status(200).json(req.user);
+//   } catch (error) {
+//     res.status(500).json({ message: 'Server error' });
+//   }
+// };
 
+const me = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .select('-password')
+      .populate('achievements');
+    
+    // Calculate user stats
+    const tests = await Test.find({ userId: req.user.id });
+    const testsTaken = tests.length;
+    const avgScore = testsTaken > 0 
+      ? tests.reduce((sum, test) => sum + test.score, 0) / testsTaken 
+      : 0;
+    const lastTest = tests.length > 0 
+      ? tests.sort((a, b) => b.dateTaken - a.dateTaken)[0].name 
+      : '';
+    
+    // Update user stats
+    user.testsTaken = testsTaken;
+    user.avgScore = Math.round(avgScore);
+    user.lastTest = lastTest;
+    
+    // Add recent activity
+    const recentActivity = tests
+      .sort((a, b) => b.dateTaken - a.dateTaken)
+      .slice(0, 3)
+      .map(test => ({
+        testName: test.name,
+        date: test.dateTaken.toISOString().split('T')[0],
+        score: test.score
+      }));
+    
+    // Add recommended tests (simplified for demo)
+    const recommendedTests = [
+      {
+        name: "SSC CHSL Full Test",
+        description: "Based on your performance in similar tests"
+      },
+      {
+        name: "Quant Speed Test",
+        description: "Improve your calculation speed"
+      },
+      {
+        name: "GK Daily Quiz",
+        description: "Enhance your general knowledge"
+      }
+    ];
+    
+    res.json({
+      ...user.toObject(),
+      recentActivity,
+      recommendedTests
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
 module.exports = {
   register,
@@ -333,6 +472,8 @@ module.exports = {
   login,
   googleAuth,
   forgotPassword,
+  verifyResetOtp,
   resetPassword,
-  verifyResetToken
+  logout,
+  me
 };

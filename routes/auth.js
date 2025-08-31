@@ -10,9 +10,11 @@ const {
   googleAuth,
    forgotPassword,
   resetPassword,
-  verifyResetToken
+  verifyResetOtp,
+  logout,
+  me
 } = require('../controllers/authController');
-const auth = require('../middlewares/auth');
+const {protect} = require('../middlewares/auth');
 
 const router = express.Router();
 
@@ -26,7 +28,7 @@ const registerValidation = [
 
 const loginValidation = [
   body('email').isEmail().withMessage('Please enter a valid email'),
-  body('password').notEmpty().withMessage('Password is required')
+  // body('password').notEmpty().withMessage('Password is required')
 ];
 
 const forgotPasswordValidation = [
@@ -38,16 +40,15 @@ const resetPasswordValidation = [
 ];
 
 // Routes
-router.get('/me', auth, (req, res) => {
-  res.json({ message: 'User profile data' });
-});
+router.get('/me', protect, me);
 router.post('/register', registerValidation, register);
 router.post('/verify-email', verifyEmail);
 router.post('/resend-otp', resendOtp);
 router.post('/login', loginValidation, login);
 router.post('/google', googleAuth);
 router.post('/forgot-password', forgotPasswordValidation, forgotPassword);
-router.post('/reset-password/:token', resetPasswordValidation, resetPassword);
-router.get('/verify-reset-token/:token', verifyResetToken);
+router.post('/verify-reset-otp', verifyResetOtp);
+router.post('/reset-password', resetPassword);
+router.post('/logout', logout);
 
 module.exports = router;
