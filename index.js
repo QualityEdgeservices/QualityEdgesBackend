@@ -11,6 +11,8 @@ const userRoutes = require('./routes/user');
 const testRoutes = require('./routes/tests');
 const examRoutes = require('./routes/exam');
 const adminRoutes = require('./routes/admin');
+const chatRoutes = require('./routes/chat')
+const contactRoutes = require('./routes/contact');
 // Import middleware
 const errorHandler = require('./middlewares/errorHandler');
 
@@ -47,6 +49,8 @@ app.use('/api/user', userRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/tests', testRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api', contactRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
