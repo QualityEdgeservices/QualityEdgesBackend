@@ -52,11 +52,50 @@ const deleteExam = async (req, res) => {
   }
 };
 
-// Create test
+
+
 const createTest = async (req, res) => {
   try {
-    const test = await Test.create(req.body);
-    res.status(201).json(test);
+    const { examId, title, description, duration, totalQuestions, category, ...rest } = req.body;
+
+    // 1. Create the test
+    const test = await Test.create({
+      examId,
+      title,
+      description,
+      duration,
+      totalQuestions,
+      category,
+      ...rest
+    });
+
+    // 2. Find the exam
+    const exam = await Exam.findById(examId);
+    if (!exam) {
+      return res.status(404).json({ message: "Exam not found" });
+    }
+
+    // 3. Create category if it does not exist
+    if (!exam.categories.has(category)) {
+      exam.categories.set(category, []); // create new category
+    }
+
+    // 4. Push test summary into that category
+    const categoryArray = exam.categories.get(category);
+    categoryArray.push({
+      name: title,
+      questions: totalQuestions,
+      duration: `${duration}s`
+    });
+    exam.categories.set(category, categoryArray); // update the map
+
+    // 5. Update totals
+    exam.totalTests += 1;
+    exam.lastUpdated = Date.now();
+
+    await exam.save();
+
+    res.status(201).json({ test, exam });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -207,6 +246,51 @@ const getStatistics = async (req, res) => {
   }
 };
 
+const getAllTests = async (req, res) => {
+  try {
+    const tests = await Test.find();
+    res.json(tests);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const deleteAccount = async (req, res) => {
+  try {
+    const { id } = req.body;
+    const user = await User.findByIdAndDelete(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.status(200).json({ message: 'Account deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword ,id} = req.body;
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Old password is incorrect' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   createExam,
   updateExam,
@@ -216,5 +300,8 @@ module.exports = {
   deleteTest,
   getUsers,
   updateUser,
-  getStatistics
+  getStatistics,
+  getAllTests,
+  deleteAccount,
+  changePassword
 };

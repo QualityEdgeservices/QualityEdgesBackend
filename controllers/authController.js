@@ -23,7 +23,7 @@ const register = async (req, res) => {
       return res.status(400).json({ message: errors.array()[0].msg });
     }
 
-    const { name, email, mobile, password } = req.body;
+    const { name, email, mobile, password, role } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ 
@@ -35,9 +35,13 @@ const register = async (req, res) => {
         message: 'User already exists with this email or mobile number' 
       });
     }
+    // if role not present set default to user
+    if (!role) {
+      role = 'user';
+    }
 
     // Create user
-    const user = new User({ name, email, mobile, password });
+    const user = new User({ name, email, mobile, password, role  });
     await user.save();
 
     // Generate and save OTP
@@ -453,7 +457,12 @@ const me = async (req, res) => {
         description: "Enhance your general knowledge"
       }
     ];
-    
+    console.log({
+      ...user.toObject(),
+      recentActivity,
+      recommendedTests
+    });
+
     res.json({
       ...user.toObject(),
       recentActivity,
