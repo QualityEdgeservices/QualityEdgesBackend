@@ -27,7 +27,7 @@ const getTest = async (req, res) => {
         marks: q.marks
       }))
     };
-    
+    console.log(testWithoutAnswers);
     res.json(testWithoutAnswers);
   } catch (error) {
     res.status(500).json({ message: error.message });

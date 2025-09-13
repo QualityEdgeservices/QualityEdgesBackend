@@ -9,7 +9,7 @@ const questionSchema = new mongoose.Schema({
   subject: { 
     type: String, 
     enum: ['Quant', 'English', 'Reasoning', 'GK'], 
-    required: true 
+    // required: true 
   },
   difficulty: { 
     type: String, 
