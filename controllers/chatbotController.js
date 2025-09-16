@@ -51,29 +51,86 @@ const geminiController = {
   },
 
   // Send a message to the chatbot
+  // async sendMessage(req, res) {
+  //   try {
+  //     const { userId, message } = req.body;
+      
+
+
+  //     if (!userId || !message) {
+  //       return res.status(400).json({ error: "User ID and message are required" });
+  //     }
+      
+  //     // Get the chat session
+  //     const chat = chatSessions.get(userId);
+  //     console.log(chatSessions);
+      
+  //     if (!chat) {
+  //       return res.status(404).json({ error: "Chat session not found. Please start a new chat." });
+  //     }
+      
+  //     // Send message to Gemini
+  //     const result = await chat.sendMessage(message);
+  //     console.log(result , "Result");
+  //     const response = await result.response;
+  //     const text = response.text();
+      
+  //     res.json({ 
+  //       success: true, 
+  //       message: text 
+  //     });
+  //   } catch (error) {
+  //     console.error("Error sending message:", error);
+  //     res.status(500).json({ error: "Failed to process message" });
+  //   }
+  // },
+
   async sendMessage(req, res) {
     try {
       const { userId, message } = req.body;
-      
+
       if (!userId || !message) {
         return res.status(400).json({ error: "User ID and message are required" });
       }
-      
-      // Get the chat session
-      const chat = chatSessions.get(userId);
-      
-      if (!chat) {
-        return res.status(404).json({ error: "Chat session not found. Please start a new chat." });
-      }
-      
-      // Send message to Gemini
+
+      // Create a new model instance every time
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+      // Start a temporary chat for this message
+      const chat = model.startChat({
+        history: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: "You are an exam preparation assistant. Help students with study tips, exam patterns, and effective learning strategies. Be supportive and educational."
+              }
+            ]
+          },
+          {
+            role: "model",
+            parts: [
+              {
+                text: "Hello! I'm your exam preparation assistant. I can help you with study techniques, exam patterns, time management, and effective learning strategies. How can I assist you today?"
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: 1000,
+          temperature: 0.7,
+        },
+      });
+
+      // Send the user’s message
       const result = await chat.sendMessage(message);
-      const response = await result.response;
-      const text = response.text();
-      
-      res.json({ 
-        success: true, 
-        message: text 
+
+      // Extract text safely
+      const text = result.response.text();
+
+      res.json({
+        success: true,
+        message: text,
       });
     } catch (error) {
       console.error("Error sending message:", error);
