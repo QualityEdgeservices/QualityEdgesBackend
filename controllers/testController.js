@@ -27,7 +27,7 @@ const getTest = async (req, res) => {
         marks: q.marks
       }))
     };
-    console.log(testWithoutAnswers);
+    // console.log(testWithoutAnswers);
     res.json(testWithoutAnswers);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -366,11 +366,82 @@ const checkAchievements = async (userId, testAttempt) => {
     console.error('Error checking achievements:', error);
   }
 };
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const analysisController = {
+  async analyzeTest(req, res) {
+    try {
+      const { testAttempt, responses } = req.body;
+
+      // console.log(testAttempt);
+      // console.log(responses);
+
+      if (!testAttempt || !responses) {
+        return res.status(400).json({ error: "Test attempt and responses are required" });
+      }
+
+      // Flexible prompt without fixed subjects
+      const prompt = `
+You are an AI exam performance analyst. Analyze the student's test performance.
+
+Test Info:
+- Title: ${testAttempt.testId?.title || ""}
+- Exam: ${testAttempt.examId?.name || ""}
+- Total Questions: ${testAttempt.totalQuestions}
+- Correct Answers: ${testAttempt.correctAnswers}
+- Incorrect Answers: ${testAttempt.incorrectAnswers}
+- Accuracy: ${testAttempt.accuracy}%
+- Score: ${testAttempt.score}
+
+Responses:
+${JSON.stringify(responses, null, 2)}
+
+Provide your analysis strictly in valid JSON with this structure:
+{
+  "overallFeedback": string,   // general performance summary
+  "strengths": [string],       // areas where the student did well
+  "weaknesses": [string],      // areas needing improvement
+  "suggestions": [string]      // practical study tips or strategy improvements
+}
+Only return JSON, no extra text.
+`;
+
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 800, temperature: 0.7 },
+      });
+      
+      const raw = result.response.text();
+      // Clean Gemini's response: remove ```json / ``` wrappers
+      const cleaned = raw.replace(/```json|```/g, "").trim();
+      let analysis;
+      try {
+        analysis = JSON.parse(cleaned);
+      } catch (e) {
+        console.error("Error parsing Gemini response:", raw);
+        return res.status(500).json({ error: "Invalid AI response format" });
+}
+
+      // If analysis is successful, send it back to the client
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error analyzing test:", error);
+      res.status(500).json({ error: "Failed to analyze test" });
+    }
+  }
+};
+
+
 
 module.exports = {
   getTest,
   startTest,
   submitTest,
   getTestResults,
-  saveTestProgress
+  saveTestProgress,
+  analysisController
 };
