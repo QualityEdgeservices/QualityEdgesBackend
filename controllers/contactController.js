@@ -1,7 +1,7 @@
 // controllers/contactController.js
-import nodemailer from "nodemailer";
+const nodemailer = require("nodemailer");
 
-export const sendContactForm = async (req, res) => {
+const sendContactForm = async (req, res) => {
   try {
     const { name, email, phone, subject, message } = req.body;
 
@@ -78,3 +78,5 @@ export const sendContactForm = async (req, res) => {
     res.status(500).json({ error: "Failed to send message. Please try again later." });
   }
 };
+
+module.exports = { sendContactForm };
