@@ -7,7 +7,7 @@
 ## Start the project in PROD ENV
 > npm run start
 
-## To build docker image of Medantrik MedTech Service Prod
+## To build docker image of Quality Edge Service Prod
 > docker build -t qualityedgeservice/quality-edge-backend-service:1.0.0 .
 
 ## To run the build image
